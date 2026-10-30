@@ -4,6 +4,9 @@ import type { SecurityAuditEntry } from '../../types/event';
 /**
  * Security & Guardrails Engine for GenAI Event Planning Assistant
  * Protects against prompt injections, jailbreaks, PII leakage, and malformed outputs.
+ * 
+ * Note: Prompt-injection defenses here represent a defense-in-depth heuristic filter
+ * to catch common override signatures and homoglyph attacks, not an absolute security boundary.
  */
 
 // Common prompt injection attack signatures
@@ -22,10 +25,73 @@ const INJECTION_PATTERNS = [
   /act\s+as\s+(an?\s+evil|an?\s+unfiltered|a\s+malicious)/i
 ];
 
-// PII regex patterns to mask accidental sensitive data
-const PII_PATTERNS = [
-  // Credit card patterns (simple Luhn-like sequence)
-  { regex: /\b(?:\d[ -]*?){13,16}\b/g, replacement: '[REDACTED_PAYMENT_CARD]' },
+// Homoglyphs and lookalike characters mapping for Cyrillic and Greek to ASCII
+const HOMOGLYPH_MAP: Record<string, string> = {
+  // Cyrillic small & capital letters that resemble Latin
+  'а': 'a', 'А': 'A',
+  'в': 'b', 'В': 'B',
+  'с': 'c', 'С': 'C',
+  'е': 'e', 'Е': 'E',
+  'і': 'i', 'І': 'I',
+  'ј': 'j', 'Ј': 'J',
+  'к': 'k', 'К': 'K',
+  'м': 'm', 'М': 'M',
+  'о': 'o', 'О': 'O',
+  'р': 'p', 'Р': 'P',
+  'ѕ': 's', 'Ѕ': 'S',
+  'т': 't', 'Т': 'T',
+  'у': 'y', 'У': 'Y',
+  'х': 'x', 'Х': 'X',
+  // Greek lookalikes
+  'α': 'a', 'Α': 'A',
+  'β': 'b', 'Β': 'B',
+  'ε': 'e', 'Ε': 'E',
+  'ι': 'i', 'Ι': 'I',
+  'κ': 'k', 'Κ': 'K',
+  'ο': 'o', 'Ο': 'O',
+  'ρ': 'p', 'Ρ': 'P',
+  'τ': 't', '\u03A4': 'T',
+  'υ': 'u', 'Υ': 'Y',
+  'χ': 'x', 'Χ': 'X'
+};
+
+/**
+ * Normalizes input text using Unicode NFKC, strips zero-width chars,
+ * replaces confusable homoglyphs, and collapses multiple whitespace for accurate inspection.
+ */
+export function normalizeSecurityInput(str: string): string {
+  let s = str.normalize('NFKC');
+  // Strip zero-width & non-printable formatting characters
+  s = s.replace(/[\u200B-\u200D\uFEFF]/g, '');
+  // Map Cyrillic and Greek homoglyphs to Latin equivalents
+  s = s.replace(/[\u0400-\u04FF\u0370-\u03FF]/g, (char) => HOMOGLYPH_MAP[char] || char);
+  // Collapse whitespace
+  s = s.replace(/\s+/g, ' ');
+  return s;
+}
+
+/**
+ * Validates a number string using the Luhn algorithm (Mod 10).
+ * Prevents false positives where innocent large numbers (e.g. budgets or IDs) get redacted.
+ */
+export function isValidLuhn(digits: string): boolean {
+  if (!/^\d{13,19}$/.test(digits)) return false;
+  let sum = 0;
+  let alternate = false;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let n = parseInt(digits.charAt(i), 10);
+    if (alternate) {
+      n *= 2;
+      if (n > 9) n -= 9;
+    }
+    sum += n;
+    alternate = !alternate;
+  }
+  return sum % 10 === 0;
+}
+
+// Other PII regex patterns to mask sensitive data
+const OTHER_PII_PATTERNS = [
   // US SSN pattern
   { regex: /\b\d{3}-\d{2}-\d{4}\b/g, replacement: '[REDACTED_GOVT_ID]' },
   // Generic API key pattern
@@ -45,7 +111,7 @@ const securityAuditHistory: SecurityAuditEntry[] = [];
 
 /**
  * Sanitizes user input before passing to GenAI models.
- * Strips dangerous injection sequences, neutralizes prompt overrides, and redacts PII.
+ * Strips injection sequences, neutralizes overrides, and redacts PII.
  */
 export function sanitizeUserInput(input: string): SanitizationResult {
   if (!input || typeof input !== 'string') {
@@ -61,36 +127,64 @@ export function sanitizeUserInput(input: string): SanitizationResult {
   const violations: string[] = [];
   let processed = input.trim();
 
-  // 1. Check for prompt injection signatures
+  // 1. Normalize for inspection (Unicode NFKC, homoglyphs, whitespace)
+  const normalizedForCheck = normalizeSecurityInput(processed);
+
+  // Check for prompt injection signatures against both normalized and raw text
+  let injectionDetected = false;
   for (const pattern of INJECTION_PATTERNS) {
-    if (pattern.test(processed)) {
+    if (pattern.test(normalizedForCheck) || pattern.test(processed)) {
       violations.push(`Prompt Injection Pattern Detected: ${pattern.source}`);
+      injectionDetected = true;
     }
   }
 
-  // 2. Neutralize instruction overrides
-  if (violations.length > 0) {
+  // 2. Neutralize instruction overrides if detected
+  if (injectionDetected) {
     for (const pattern of INJECTION_PATTERNS) {
       processed = processed.replace(pattern, '[INJECTION_NEUTRALIZED]');
     }
+    // Also check if normalized match was missed due to homoglyphs in raw text
+    if (!processed.includes('[INJECTION_NEUTRALIZED]')) {
+      processed = '[INJECTION_NEUTRALIZED] ' + processed;
+    }
   }
 
-  // 3. Redact sensitive PII
-  for (const pii of PII_PATTERNS) {
+  // 3. Redact sensitive Payment Cards with card-group structure or Luhn check
+  const CARD_CANDIDATE_REGEX = /\b(?:\d[ -]*?){13,19}\b/g;
+  processed = processed.replace(CARD_CANDIDATE_REGEX, (match) => {
+    const digitsOnly = match.replace(/\D/g, '');
+    if (digitsOnly.length < 13 || digitsOnly.length > 19) return match;
+
+    // Check if it's explicitly structured in standard card groups (e.g. 4-4-4-4 or 4-6-5)
+    const isCardGrouped = /^\d{4}[ -]\d{4}[ -]\d{4}[ -]\d{4}$/.test(match) || /^\d{4}[ -]\d{6}[ -]\d{4,5}$/.test(match);
+    // Or if raw digits pass the mathematical Luhn checksum
+    const passesLuhn = isValidLuhn(digitsOnly);
+
+    if (isCardGrouped || passesLuhn) {
+      violations.push('Sensitive Information (Payment Card) Detected and Masked');
+      return '[REDACTED_PAYMENT_CARD]';
+    }
+    return match;
+  });
+
+  // 4. Redact other sensitive PII (SSN, API keys)
+  for (const pii of OTHER_PII_PATTERNS) {
     if (pii.regex.test(processed)) {
       violations.push('Sensitive Information (PII/Key) Detected and Masked');
       processed = processed.replace(pii.regex, pii.replacement);
     }
   }
 
-  // 4. Character limits and control character stripping
+  // 5. Character limits
   if (processed.length > 4000) {
     violations.push('Input truncated to 4000 character maximum');
     processed = processed.substring(0, 4000);
   }
 
-  // Strip non-printable / control ASCII characters except standard newlines & tabs
-  processed = processed.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  // Strip non-printable / control ASCII & Unicode characters except standard newlines & tabs
+  // Uses \p{Cc} with u flag to avoid no-control-regex warnings
+  processed = processed.replace(/\p{Cc}/gu, (char) => (char === '\t' || char === '\n' || char === '\r' ? char : ''));
 
   const isSafe = violations.length === 0;
   const riskLevel = violations.length === 0 ? 'low' : violations.length === 1 ? 'medium' : violations.length <= 2 ? 'high' : 'critical';
@@ -135,7 +229,7 @@ export function clearSecurityAuditLog(): void {
 
 // Zod Schema for Structured Event Plan Generation
 export const BudgetItemSchema = z.object({
-  id: z.string().optional().default(() => `b-${Math.random().toString(36).substr(2, 9)}`),
+  id: z.string().optional().default(() => `b-${Math.random().toString(36).substring(2, 9)}`),
   category: z.string().min(1),
   name: z.string().min(1),
   estimatedCost: z.number().nonnegative(),
@@ -147,7 +241,7 @@ export const BudgetItemSchema = z.object({
 });
 
 export const TimelineItemSchema = z.object({
-  id: z.string().optional().default(() => `t-${Math.random().toString(36).substr(2, 9)}`),
+  id: z.string().optional().default(() => `t-${Math.random().toString(36).substring(2, 9)}`),
   title: z.string().min(1),
   description: z.string().default(''),
   dueDate: z.string(),
@@ -158,7 +252,7 @@ export const TimelineItemSchema = z.object({
 });
 
 export const VendorItemSchema = z.object({
-  id: z.string().optional().default(() => `v-${Math.random().toString(36).substr(2, 9)}`),
+  id: z.string().optional().default(() => `v-${Math.random().toString(36).substring(2, 9)}`),
   category: z.enum([
     'venue', 'catering', 'photography', 'music-entertainment', 
     'decor-florals', 'permits-security', 'cake-bakery', 'attire-styling', 
@@ -177,7 +271,7 @@ export const VendorItemSchema = z.object({
 });
 
 export const IdeaItemSchema = z.object({
-  id: z.string().optional().default(() => `i-${Math.random().toString(36).substr(2, 9)}`),
+  id: z.string().optional().default(() => `i-${Math.random().toString(36).substring(2, 9)}`),
   title: z.string().min(1),
   category: z.enum(['theme', 'activity', 'decor', 'food-drink', 'entertainment', 'speech-vows', 'community-impact', 'budget-hack']),
   description: z.string().min(1),
@@ -195,15 +289,41 @@ export const GeneratedPlanSchema = z.object({
   personalizedIdeas: z.array(IdeaItemSchema)
 });
 
+export type GeneratedPlanOutput = z.infer<typeof GeneratedPlanSchema>;
+
 /**
- * Validates and repairs AI JSON output against the strict Zod schema.
- * Replaces invalid fields with safe defaults rather than crashing.
+ * Validates AI JSON output against the strict Zod schema and scans output text
+ * for prompt injection echoes or system prompt leakage.
  */
-export function validateAIOutput(rawJson: unknown) {
+export function validateAIOutput(rawJson: unknown): {
+  success: boolean;
+  data: GeneratedPlanOutput | null;
+  error: string | null;
+} {
   try {
+    const data = GeneratedPlanSchema.parse(rawJson);
+
+    // Scan output text fields for reflected prompt injection or instructions leakage
+    const textCorpus = [
+      data.themeVibeSummary,
+      ...data.budgetBreakdown.map(b => `${b.name} ${b.notes}`),
+      ...data.timelineMilestones.map(t => `${t.title} ${t.description}`),
+      ...data.vendorChecklist.map(v => `${v.name} ${v.notes}`),
+      ...data.personalizedIdeas.map(i => `${i.title} ${i.description}`)
+    ].join(' ');
+
+    const outputScan = sanitizeUserInput(textCorpus);
+    if (outputScan.violations.some(v => v.includes('Prompt Injection'))) {
+      return {
+        success: false,
+        data: null,
+        error: 'Output contained detected prompt injection or instruction leakage'
+      };
+    }
+
     return {
       success: true,
-      data: GeneratedPlanSchema.parse(rawJson),
+      data,
       error: null
     };
   } catch (err) {
@@ -211,7 +331,7 @@ export function validateAIOutput(rawJson: unknown) {
       return {
         success: false,
         data: null,
-        error: `Output Schema Validation Failed: ${(err as any).issues ? (err as any).issues.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ') : String(err)}`
+        error: `Output Schema Validation Failed: ${err.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ')}`
       };
     }
     return {

@@ -1,16 +1,69 @@
+import { z } from 'zod';
 import type { EventPlan, EventDetails } from '../../types/event';
-import { generateTailoredHeuristicPlan } from '../ai/geminiClient';
+import { generateTailoredHeuristicPlan } from '../ai/heuristicEngine';
+import { BudgetItemSchema, TimelineItemSchema, VendorItemSchema, IdeaItemSchema } from '../security/guardrails';
 
-const STORAGE_KEY = 'planvibe_saved_events_v1';
+const STORAGE_KEY_V2 = 'planvibe_saved_events_v2';
+const STORAGE_KEY_LEGACY = 'planvibe_saved_events_v1';
 const ACTIVE_EVENT_KEY = 'planvibe_active_event_id';
+const CURRENT_SCHEMA_VERSION = 2;
+
+/**
+ * Generates an ISO date string (YYYY-MM-DD) offset by a given number of days from today.
+ * Guarantees that demo events always land in the future and countdown timers stay positive.
+ */
+export function getRelativeFutureDate(daysAhead: number): string {
+  const target = new Date();
+  target.setDate(target.getDate() + daysAhead);
+  return target.toISOString().split('T')[0];
+}
+
+/**
+ * Zod schemas for persisted EventPlan state
+ */
+export const StoredEventDetailsSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  type: z.enum(['wedding', 'birthday', 'community']),
+  date: z.string().min(1),
+  location: z.string().default('Venue TBD'),
+  guestCount: z.number().int().positive().default(50),
+  vibe: z.string().default('Celebration'),
+  totalBudget: z.number().nonnegative().default(1000),
+  currency: z.enum(['USD', 'EUR', 'GBP', 'INR', 'CAD', 'AUD', 'AED']).default('USD'),
+  specialRequests: z.string().optional().default(''),
+  createdAt: z.string().default(() => new Date().toISOString()),
+  updatedAt: z.string().default(() => new Date().toISOString())
+});
+
+export const StoredBudgetSummarySchema = z.object({
+  totalBudget: z.number().nonnegative(),
+  currency: z.enum(['USD', 'EUR', 'GBP', 'INR', 'CAD', 'AUD', 'AED']).default('USD'),
+  items: z.array(BudgetItemSchema).default([]),
+  contingencyPercent: z.number().nonnegative().default(8)
+});
+
+export const StoredEventPlanSchema = z.object({
+  details: StoredEventDetailsSchema,
+  budget: StoredBudgetSummarySchema,
+  timeline: z.array(TimelineItemSchema).default([]),
+  vendors: z.array(VendorItemSchema).default([]),
+  ideas: z.array(IdeaItemSchema).default([])
+});
+
+export const StorageEnvelopeSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  updatedAt: z.string(),
+  events: z.array(StoredEventPlanSchema)
+});
 
 export function getInitialDemoEvents(): EventPlan[] {
-  // 1. Luxury Botanical Wedding
+  // 1. Luxury Botanical Wedding (approx. 4 months ahead)
   const weddingDetails: EventDetails = {
     id: 'demo-wedding-1',
     title: 'Avery & Morgan’s Botanical Glasshouse Wedding',
     type: 'wedding',
-    date: '2026-09-18',
+    date: getRelativeFutureDate(120),
     location: 'Conservatory of Flowers, San Francisco, CA',
     guestCount: 135,
     vibe: 'Modern Botanical Elegance with Ambient Candlelight',
@@ -21,12 +74,12 @@ export function getInitialDemoEvents(): EventPlan[] {
     updatedAt: new Date().toISOString()
   };
 
-  // 2. High-Energy Birthday
+  // 2. High-Energy Birthday (approx. 1.5 months ahead)
   const birthdayDetails: EventDetails = {
     id: 'demo-birthday-2',
     title: 'Maya’s 30th Cyberpunk Rooftop Neon Bash',
     type: 'birthday',
-    date: '2026-07-25',
+    date: getRelativeFutureDate(45),
     location: 'The Penthouse Vista, Brooklyn, NY',
     guestCount: 65,
     vibe: 'Futuristic Neon Cyberpunk & High Energy Dancefloor',
@@ -37,12 +90,12 @@ export function getInitialDemoEvents(): EventPlan[] {
     updatedAt: new Date().toISOString()
   };
 
-  // 3. Community Impact Festival
+  // 3. Community Impact Festival (approx. 3 months ahead)
   const communityDetails: EventDetails = {
     id: 'demo-community-3',
     title: 'Oakridge Eco-Harvest Community Street Fair',
     type: 'community',
-    date: '2026-10-10',
+    date: getRelativeFutureDate(90),
     location: 'Oakridge Town Square & Main Boulevard',
     guestCount: 450,
     vibe: 'Warm Autumn Harvest, Family Fun & Environmental Action',
@@ -60,44 +113,93 @@ export function getInitialDemoEvents(): EventPlan[] {
   ];
 }
 
+function getStorage(): Storage | null {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    return window.localStorage;
+  }
+  if (typeof globalThis !== 'undefined' && (globalThis as any).localStorage) {
+    return (globalThis as any).localStorage;
+  }
+  return null;
+}
+
+/**
+ * Loads all events with strict Zod schema validation and migration support.
+ * Prevents corrupted or old data structures from crashing the React UI.
+ */
 export function loadAllEvents(): EventPlan[] {
-  if (typeof window === 'undefined') return [];
+  const storage = getStorage();
+  if (!storage) return [];
+
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      const defaults = getInitialDemoEvents();
-      saveAllEvents(defaults);
-      return defaults;
+    // 1. Try modern versioned envelope (V2)
+    const rawV2 = storage.getItem(STORAGE_KEY_V2);
+    if (rawV2) {
+      const parsedJson = JSON.parse(rawV2);
+      const envelopeResult = StorageEnvelopeSchema.safeParse(parsedJson);
+      if (envelopeResult.success && envelopeResult.data.events.length > 0) {
+        return envelopeResult.data.events as EventPlan[];
+      }
     }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+
+    // 2. Migration fallback from legacy unversioned storage (V1)
+    const rawLegacy = storage.getItem(STORAGE_KEY_LEGACY);
+    if (rawLegacy) {
+      const parsedLegacy = JSON.parse(rawLegacy);
+      if (Array.isArray(parsedLegacy) && parsedLegacy.length > 0) {
+        const validatedEvents: EventPlan[] = [];
+        for (const item of parsedLegacy) {
+          const itemResult = StoredEventPlanSchema.safeParse(item);
+          if (itemResult.success) {
+            validatedEvents.push(itemResult.data as EventPlan);
+          }
+        }
+        if (validatedEvents.length > 0) {
+          saveAllEvents(validatedEvents); // Upgrade to V2
+          return validatedEvents;
+        }
+      }
     }
   } catch (e) {
-    console.error('Error loading events from storage, resetting to default:', e);
+    console.warn('Storage parsing or validation failed, gracefully resetting to demo defaults:', e);
   }
+
+  // 3. Default fallback if storage empty or corrupted
   const defaults = getInitialDemoEvents();
   saveAllEvents(defaults);
   return defaults;
 }
 
+/**
+ * Saves events wrapped in a versioned envelope for schema evolution.
+ */
 export function saveAllEvents(events: EventPlan[]): void {
-  if (typeof window === 'undefined') return;
+  const storage = getStorage();
+  if (!storage) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+    const envelope = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      updatedAt: new Date().toISOString(),
+      events
+    };
+    storage.setItem(STORAGE_KEY_V2, JSON.stringify(envelope));
+    // Also keep sync with legacy key during transition
+    storage.setItem(STORAGE_KEY_LEGACY, JSON.stringify(events));
   } catch (e) {
     console.error('Error saving events to storage:', e);
   }
 }
 
 export function getActiveEventId(): string {
-  if (typeof window === 'undefined') return 'demo-wedding-1';
-  return localStorage.getItem(ACTIVE_EVENT_KEY) || 'demo-wedding-1';
+  const storage = getStorage();
+  if (!storage) return 'demo-wedding-1';
+  return storage.getItem(ACTIVE_EVENT_KEY) || 'demo-wedding-1';
 }
 
 export function setActiveEventId(id: string): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(ACTIVE_EVENT_KEY, id);
+  const storage = getStorage();
+  if (!storage) return;
+  storage.setItem(ACTIVE_EVENT_KEY, id);
 }
 
 export function saveSingleEvent(updatedEvent: EventPlan): void {

@@ -1,17 +1,19 @@
 import React from 'react';
 import { 
   ShieldCheck, 
-  Sparkles, 
   Heart, 
   CheckCircle2 
 } from 'lucide-react';
 import type { RegionConfig } from '../types/event';
+import logoImg from '../assets/logo.png';
 
 interface FooterProps {
   currentRegion: RegionConfig;
   onOpenSecurityModal: () => void;
   onOpenAccessibilityModal: () => void;
 }
+
+const CURRENT_YEAR = new Date().getFullYear();
 
 export const Footer: React.FC<FooterProps> = ({
   currentRegion,
@@ -42,16 +44,19 @@ export const Footer: React.FC<FooterProps> = ({
         <div style={{ maxWidth: '420px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
             <div style={{
-              background: 'var(--primary-gradient)',
               width: '32px',
               height: '32px',
               borderRadius: '8px',
+              overflow: 'hidden',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#ffffff'
+              background: 'rgba(255, 255, 255, 0.95)',
+              border: '1px solid var(--border-color)',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+              flexShrink: 0
             }}>
-              <Sparkles size={18} />
+              <img src={logoImg} alt="PlanVibe AI Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '1px' }} />
             </div>
             <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.2rem', color: 'var(--text-primary)' }}>
               PlanVibe AI
@@ -126,7 +131,7 @@ export const Footer: React.FC<FooterProps> = ({
         color: 'var(--text-muted)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <span>© {new Date().getFullYear()} PlanVibe AI. All rights reserved.</span>
+          <span>© {CURRENT_YEAR} PlanVibe AI. All rights reserved.</span>
           <span>•</span>
           <span>Crafted with</span>
           <Heart size={13} style={{ color: '#e11d48', fill: '#e11d48' }} />

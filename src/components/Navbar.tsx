@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  Sparkles, 
   PlusCircle, 
   ShieldCheck, 
   Sliders, 
@@ -12,12 +11,15 @@ import {
   Cake,
   HeartHandshake,
   Heart,
-  Globe
+  Globe,
+  Smartphone,
+  Monitor
 } from 'lucide-react';
 import type { EventPlan, RegionConfig } from '../types/event';
 import { SUPPORTED_REGIONS } from '../types/event';
 import { getStoredApiKey } from '../services/ai/geminiClient';
 import { exportPlanToJson } from '../services/storage/eventStorage';
+import logoImg from '../assets/logo.png';
 
 interface NavbarProps {
   events: EventPlan[];
@@ -31,6 +33,8 @@ interface NavbarProps {
   onToggleTheme: () => void;
   currentRegion: RegionConfig;
   onSelectRegion: (region: RegionConfig) => void;
+  orientation?: 'landscape' | 'portrait';
+  onToggleOrientation?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -44,7 +48,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   theme,
   onToggleTheme,
   currentRegion,
-  onSelectRegion
+  onSelectRegion,
+  orientation = 'landscape',
+  onToggleOrientation
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
@@ -76,17 +82,28 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Brand Logo & Name */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <div style={{
-          background: 'var(--primary-gradient)',
           width: '42px',
           height: '42px',
           borderRadius: '12px',
+          overflow: 'hidden',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#ffffff',
-          boxShadow: '0 4px 14px rgba(79, 70, 229, 0.35)'
+          boxShadow: '0 4px 14px rgba(79, 70, 229, 0.35)',
+          background: 'rgba(255, 255, 255, 0.95)',
+          border: '1px solid var(--border-color)',
+          flexShrink: 0
         }}>
-          <Sparkles size={22} />
+          <img 
+            src={logoImg} 
+            alt="PlanVibe AI Logo" 
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              padding: '2px'
+            }} 
+          />
         </div>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -338,6 +355,35 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           {theme === 'dark' ? <Sun size={16} style={{ color: '#f59e0b' }} /> : <Moon size={16} />}
         </button>
+
+        {/* Landscape <-> Portrait Orientation Toggle Button */}
+        {onToggleOrientation && (
+          <button
+            onClick={onToggleOrientation}
+            className="btn btn-secondary btn-sm"
+            style={{
+              borderColor: orientation === 'portrait' ? 'var(--brand-purple)' : 'var(--border-color)',
+              background: orientation === 'portrait' ? 'rgba(124, 58, 237, 0.12)' : 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem'
+            }}
+            title={orientation === 'landscape' ? "Toggle to Portrait View (Mobile/Tablet Mode)" : "Toggle to Landscape View (Desktop Widescreen)"}
+            aria-label={`Current layout is ${orientation}. Click to toggle orientation`}
+          >
+            {orientation === 'landscape' ? (
+              <>
+                <Smartphone size={15} style={{ color: 'var(--brand-purple)' }} />
+                <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>Portrait</span>
+              </>
+            ) : (
+              <>
+                <Monitor size={15} style={{ color: 'var(--brand-cyan)' }} />
+                <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>Landscape</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
     </header>
   );

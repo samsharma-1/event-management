@@ -114,6 +114,13 @@ export interface EventPlan {
   ideas: PersonalizedIdea[];
 }
 
+export type SuggestedActionPayload =
+  | BudgetItem
+  | TimelineMilestone
+  | VendorItem
+  | PersonalizedIdea
+  | Record<string, unknown>;
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant' | 'system';
@@ -123,7 +130,7 @@ export interface ChatMessage {
   suggestedActions?: {
     label: string;
     actionType: 'add-budget' | 'add-timeline' | 'add-vendor' | 'add-idea';
-    payload: any;
+    payload: SuggestedActionPayload;
   }[];
 }
 

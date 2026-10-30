@@ -4,7 +4,9 @@ import {
   X, 
   Eye, 
   Type, 
-  Keyboard
+  Keyboard,
+  Smartphone,
+  Monitor
 } from 'lucide-react';
 
 interface AccessibilityControlsProps {
@@ -16,6 +18,8 @@ interface AccessibilityControlsProps {
   onToggleHighContrast: () => void;
   reducedMotion: boolean;
   onToggleReducedMotion: () => void;
+  orientation?: 'landscape' | 'portrait';
+  onToggleOrientation?: () => void;
 }
 
 export const AccessibilityControls: React.FC<AccessibilityControlsProps> = ({
@@ -26,7 +30,9 @@ export const AccessibilityControls: React.FC<AccessibilityControlsProps> = ({
   highContrast,
   onToggleHighContrast,
   reducedMotion,
-  onToggleReducedMotion
+  onToggleReducedMotion,
+  orientation = 'landscape',
+  onToggleOrientation
 }) => {
   if (!isOpen) return null;
 
@@ -136,6 +142,32 @@ export const AccessibilityControls: React.FC<AccessibilityControlsProps> = ({
               {reducedMotion ? 'Active' : 'Off'}
             </button>
           </div>
+
+          {/* Orientation Toggle */}
+          {onToggleOrientation && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem', background: 'rgba(255,255,255,0.04)', borderRadius: 'var(--radius-sm)' }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  {orientation === 'landscape' ? <Smartphone size={16} /> : <Monitor size={16} />} Layout Orientation
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  Toggle between Landscape (Widescreen) and Portrait (Mobile/Tablet view).
+                </div>
+              </div>
+
+              <button
+                onClick={onToggleOrientation}
+                className="btn btn-sm btn-secondary"
+                style={{
+                  borderColor: orientation === 'portrait' ? 'var(--brand-purple)' : 'var(--border-color)',
+                  color: orientation === 'portrait' ? 'var(--brand-purple)' : 'var(--text-primary)'
+                }}
+                aria-pressed={orientation === 'portrait'}
+              >
+                {orientation === 'landscape' ? 'Landscape (Wide)' : 'Portrait (Mobile)'}
+              </button>
+            </div>
+          )}
 
           {/* Keyboard Navigation Quick Reference */}
           <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-sm)' }}>

@@ -318,6 +318,77 @@ button, input, select, textarea {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Landscape & Portrait Layout Modes */
+.app-container {
+  min-height: 100vh;
+  transition: max-width 0.35s cubic-bezier(0.16, 1, 0.3, 1), padding 0.35s ease;
+}
+
+.app-container.layout-landscape {
+  width: 100%;
+}
+
+.app-container.layout-portrait {
+  max-width: 480px;
+  margin: 1.5rem auto 3rem auto;
+  min-height: 94vh;
+  border: 10px solid rgba(15, 23, 42, 0.85);
+  border-radius: 44px;
+  box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.15);
+  overflow-x: hidden;
+  position: relative;
+  background-color: var(--bg-primary);
+  padding-bottom: 2rem;
+}
+
+[data-theme='dark'] .app-container.layout-portrait {
+  border-color: rgba(30, 41, 59, 0.95);
+  box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.app-container.layout-portrait header.glass-panel {
+  margin: 0.5rem 0.75rem 1rem 0.75rem;
+  border-radius: 20px;
+  padding: 0.75rem 1rem;
+}
+
+.app-container.layout-portrait main {
+  padding: 0 0.5rem;
+}
+
+.app-container.layout-portrait footer.glass-panel {
+  margin: 1.5rem 0.75rem 0.5rem 0.75rem;
+  border-radius: 20px;
+  padding: 1.25rem;
+}
+
+/* Portrait Device Speaker & Camera Notch */
+.portrait-device-notch {
+  width: 130px;
+  height: 20px;
+  background: #0f172a;
+  border-radius: 0 0 14px 14px;
+  margin: 0 auto 0.75rem auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.portrait-device-notch::before {
+  content: '';
+  width: 45px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+.portrait-device-notch::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: rgba(59, 130, 246, 0.6);
+  border-radius: 50%;
+}
+
 /* Reduced Motion Preference */
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {

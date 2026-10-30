@@ -4,33 +4,33 @@
 
 ---
 
-## 🏆 Project Overview
+##  Project Overview
 
-**PlanVibe AI** is an enterprise-grade, accessible, and secure GenAI-powered planning platform designed to solve the real-world operational complexities of organizing **Weddings**, **Birthdays**, and **Community Gatherings**.
+**PlanVibe AI** is an accessible, modern GenAI-powered planning platform designed to solve the real-world operational complexities of organizing **Weddings**, **Birthdays**, and **Community Gatherings**.
 
-Unlike superficial wrappers that output generic text bullets, PlanVibe AI operates as a **Master Financial Architect, Timeline Producer, and Logistics Director**, delivering:
-- 💰 **Structured Budget Allocations** with 8% contingency buffers, category visualization, actuals tracking, and an **AI Budget Optimizer**.
-- ⏱️ **Phased Timelines & Minute-by-Minute Run-of-Show** with precise hourly stamps and **1-click iCalendar (.ics) export**.
-- 📋 **Domain-Specific Vendor Checklists & Pipeline Tracking** paired with an **AI Interview Questions Generator** to expose hidden fees and contract traps.
-- 💡 **Personalized Idea Lab & Moodboards** with 1-click Hex color copying and direct integration into your budget and timeline.
-- 💬 **Context-Aware Co-Planner AI Chat** synced to your active event specifications.
+Unlike superficial wrappers that output generic text bullets, PlanVibe AI operates as a **Financial Architect, Timeline Producer, and Logistics Director**, delivering:
+-  **Structured Budget Allocations** with 8% contingency buffers, category visualization, actuals tracking, and an **AI Budget Optimizer**.
+-  **Phased Timelines & Minute-by-Minute Run-of-Show** with precise hourly stamps and **1-click iCalendar (.ics) export**.
+-  **Domain-Specific Vendor Checklists & Pipeline Tracking** paired with an **AI Interview Questions Generator** to expose hidden fees and contract traps.
+-  **Personalized Idea Lab & Moodboards** with 1-click Hex color copying and direct integration into your budget and timeline.
+-  **Context-Aware Co-Planner AI Chat** synced to your active event specifications.
 
 ---
 
-## 🎯 Alignment with Evaluation Criteria
+##  Alignment with Evaluation Criteria
 
 | Evaluation Tier | Criteria | Implementation in PlanVibe AI |
 | :--- | :--- | :--- |
 | **High Impact** | **Problem Statement Alignment** | Dedicated planning workflows tailored specifically for **Weddings** (ceremony, reception, vows, tastings), **Birthdays** (milestone themes, cake, DJ, party flow), and **Community Events** (city permits, staging, volunteers, zero-waste). |
-| **High Impact** | **Code Quality** | Strict TypeScript architecture (`src/types/event.ts`), modular separation of concerns, reactive state management, typed local persistence, and clean reusable components. |
-| **Medium Impact** | **Security & Responsible AI** | Multi-tier prompt injection defense, automated PII/payment card masking, strict Zod schema validation on AI outputs, and an interactive **Security & Guardrails Inspector** with live exploit testing. |
-| **Medium Impact** | **Efficiency & Reliability** | **Dual-Engine Architecture**: Seamlessly toggles between Live Google Gemini API and a zero-key **Adaptive Heuristic Simulation Engine**, ensuring 100% offline capability and zero rate-limit crashes for hackathon judges. |
-| **Low Impact** | **Testing Validation** | Automated Vitest test suite (`npm test`) validating prompt injection neutralization, PII redacting, Zod schema validation, budget math, and iCal generation. |
+| **High Impact** | **Code Quality** | Strict TypeScript architecture (`src/types/event.ts`), modular separation of concerns, reactive state management, Zod schema validation on storage and model outputs, and zero linter warnings. |
+| **Medium Impact** | **Security & Responsible AI** | Defense-in-depth prompt injection mitigation with Unicode NFKC and homoglyph normalization, Luhn-verified PII/payment card masking, strict Zod schema validation on AI outputs, header-based API key transport (`x-goog-api-key`), and an interactive **Security & Guardrails Inspector**. |
+| **Medium Impact** | **Efficiency & Reliability** | **Dual-Engine Architecture**: Seamlessly toggles between Live Google Gemini API (modern `gemini-2.5-flash`, configurable) and a zero-key **Adaptive Heuristic Intelligence Engine**, ensuring offline simulation capability and zero rate-limit crashes for hackathon judges. |
+| **Low Impact** | **Testing Validation** | Automated Vitest test suite (`npm test`) with 23 unit and integration tests validating security guardrails, homoglyph resistance, Luhn algorithms, schema parsing, fallback mechanisms, and calendar export. |
 | **Low Impact** | **Accessibility (WCAG AA/AAA)** | High-contrast mode toggle, dynamic text font scaling (14px–22px), full keyboard navigation (`Tab`, `Enter`, `Space`, `Esc`), reduced motion mode, and ARIA live regions for screen readers. |
 
 ---
 
-## 🚀 Quick Start Guide
+##  Quick Start Guide
 
 ### Prerequisites
 - Node.js (v18+ recommended, verified on v22)
@@ -51,44 +51,57 @@ Navigate to `http://localhost:5173/` in your browser.
 ```bash
 npm test
 ```
-Runs 12 unit and integration tests verifying security guardrails, schema parsing, and event algorithms.
+Runs 23 unit and integration tests verifying security guardrails, homoglyph normalization, Luhn credit card validation, schema parsing, storage recovery, and Gemini client fallback.
 
-### 4. Build for Production
+### 4. Code Quality & Lint
+```bash
+npm run lint
+```
+Enforces oxlint rules with 0 errors and 0 warnings.
+
+### 5. Build for Production
 ```bash
 npm run build
 ```
+Type-checks with `tsc -b` and produces optimized, code-split chunks with Vite.
 
 ---
 
-## 🛡️ Security & Responsible GenAI Implementation
+##  Security & Responsible GenAI Implementation
 
 Evaluators can inspect the active security safeguards by clicking the **"Guardrails"** badge in the header:
 
 1. **Prompt Injection Mitigation (`sanitizeUserInput`)**:
-   - Neutralizes malicious jailbreaks (`Ignore all previous instructions`, `DAN mode`, `reveal your system prompt`, `repeat everything above`).
-   - Normalizes and sanitizes inputs before passing them to LLM APIs.
+   - Applies Unicode NFKC normalization and Cyrillic/Greek homoglyph mapping (`ignоre` -> `ignore`) to resist common evasion techniques.
+   - Normalizes whitespace and neutralizes detected override signatures before prompt synthesis.
+   - *Security Note*: These filters serve as a practical defense-in-depth heuristic filter rather than an absolute security boundary.
 2. **PII and Financial Token Redaction**:
-   - Automatically redacts Credit Card numbers (`[REDACTED_PAYMENT_CARD]`), SSNs (`[REDACTED_GOVT_ID]`), and accidental API keys.
+   - Detects card-shaped digit groupings and applies the **Luhn algorithm (Mod 10)** check to mask valid payment cards (`[REDACTED_PAYMENT_CARD]`) while preventing false-positive redaction of innocent numbers (e.g. large budgets like `1500000000000 INR`).
+   - Masks US SSNs (`[REDACTED_GOVT_ID]`) and exposed API keys (`[REDACTED_API_KEY]`).
 3. **Strict Schema Enforcement (Zod)**:
    - Validates all AI outputs against `GeneratedPlanSchema` using Zod. Rejects unvalidated scripts or unexpected payloads.
-4. **Interactive Security Playground**:
+   - Validates incoming and persisted event plans in `eventStorage` with automated schema versioning (V2) and migration fallbacks.
+4. **Header-Based API Key Transmission**:
+   - Transmits Gemini API keys securely via the `x-goog-api-key` header rather than URL query parameters, preventing leakage into browser history, server logs, or intermediate proxies.
+   - *Production Recommendation*: For deployments beyond client demos, proxy API requests through a secure serverless backend.
+5. **Interactive Security Playground**:
    - Judges can test malicious payloads in real-time inside the **Security Inspector Modal** to verify live defense and confidence scoring.
 
 ---
 
-## ⚡ Dual AI Engine (Zero-Key Reviewer Guarantee)
+##  Dual AI Engine (Zero-Key Reviewer Guarantee)
 
 Hackathon judges often face rate limits or missing API keys. PlanVibe AI implements a resilient dual-engine architecture:
 
-1. **Simulated AI Engine (Default)**:
+1. **Simulated Heuristic AI Engine (Default)**:
    - Zero-key, offline-safe heuristic engine that generates authentic, mathematically sound budgets, phased milestones, and custom aesthetic color stories based on user inputs.
-2. **Live Gemini Engine (`gemini-1.5-flash`)**:
-   - Connect your own Google Gemini API key via the **"AI Engine"** button in the navbar.
-   - Keys are stored locally in the browser and never transmitted to external telemetry servers.
+2. **Live Gemini Engine (Default: `gemini-2.5-flash`)**:
+   - Connect your own Google Gemini API key via the **"AI Engine"** button in the navbar, or configure `VITE_GEMINI_MODEL` and `VITE_GEMINI_API_KEY` in `.env`.
+   - Keys are stored locally in the browser and transmitted using secure HTTP request headers.
 
 ---
 
-## 📁 Architecture & File Structure
+##  Architecture & File Structure
 
 ```
 event-planner-promptwars/
@@ -97,12 +110,13 @@ event-planner-promptwars/
 │   │   └── event.ts                    # Strict TypeScript domain interfaces
 │   ├── services/
 │   │   ├── security/
-│   │   │   └── guardrails.ts          # Prompt injection, PII redactor & Zod schemas
+│   │   │   └── guardrails.ts          # Normalization, homoglyphs, Luhn check & Zod schemas
 │   │   ├── ai/
-│   │   │   ├── geminiClient.ts        # Gemini API & Adaptive Heuristic Engine
+│   │   │   ├── geminiClient.ts        # Gemini API orchestrator & model config
+│   │   │   ├── heuristicEngine.ts     # Domain heuristic engine & expert advisor
 │   │   │   └── promptTemplates.ts     # Specialized Wedding, Birthday & Community prompts
 │   │   ├── storage/
-│   │   │   └── eventStorage.ts        # Typed local storage persistence & demo events
+│   │   │   └── eventStorage.ts        # Typed storage persistence, relative dates & Zod migration
 │   │   └── export/
 │   │       └── calendarExport.ts      # RFC 5545 iCalendar (.ics) generator
 │   ├── components/
@@ -112,24 +126,28 @@ event-planner-promptwars/
 │   │   ├── TimelineManager.tsx        # Milestones, hourly run-of-show & iCal export
 │   │   ├── VendorTracker.tsx          # Status pipeline & AI interview questions
 │   │   ├── IdeaLab.tsx                # Hex color swatches, ideas & 1-click add
-│   │   ├── EventWizard.tsx            # 3-step AI onboarding wizard
-│   │   ├── AIChatAssistant.tsx        # Context-aware floating co-planner
-│   │   ├── SecurityAuditModal.tsx     # Live injection testing playground & audit log
+│   │   ├── EventWizard.tsx            # 3-step AI onboarding wizard (lazy loaded)
+│   │   ├── AIChatAssistant.tsx        # Pure React markdown co-planner
+│   │   ├── SecurityAuditModal.tsx     # Live injection testing playground (lazy loaded)
 │   │   ├── AccessibilityControls.tsx  # Dynamic font scaling & high contrast mode
 │   │   └── ApiKeyModal.tsx            # Dual engine switcher
-│   ├── App.tsx                        # Master container and reactive orchestrator
+│   ├── App.tsx                        # Master container, lazy imports & reactive orchestrator
 │   ├── index.css                      # Modern design system with HSL tokens
 │   └── main.tsx                       # React 19 entry point
 ├── tests/
-│   ├── guardrails.test.ts             # Security & injection test suite
-│   └── eventLogic.test.ts             # Budget, timeline & demo plan tests
+│   ├── guardrails.test.ts             # Homoglyphs, Luhn check, PII & Zod schemas
+│   ├── eventLogic.test.ts             # Domain planning, future countdowns & storage migrations
+│   └── geminiClient.test.ts           # Gemini headers, model config & fallback tests
+├── .env.example                       # Sample environment configuration
+├── .github/workflows/ci.yml           # Automated CI workflow
+├── LICENSE                            # MIT License
 ├── package.json
 └── vite.config.ts
 ```
 
 ---
 
-## ♿ Accessibility Standards (WCAG 2.1 AA/AAA)
+##  Accessibility Standards (WCAG 2.1 AA/AAA)
 
 Click the **Sliders (Accessibility)** icon in the header to access:
 - **Font Scale Slider**: Smoothly scale application typography from 14px to 22px.
@@ -140,5 +158,5 @@ Click the **Sliders (Accessibility)** icon in the header to access:
 
 ---
 
-## 📄 License
+##  License
 MIT License. Built for competition evaluation.

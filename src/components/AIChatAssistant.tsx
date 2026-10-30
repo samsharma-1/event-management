@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import DOMPurify from 'dompurify';
 import { 
   X, 
   Send, 
@@ -14,18 +13,78 @@ interface AIChatAssistantProps {
   event: EventDetails;
 }
 
+function getFormattedTime(): string {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderFormattedMessage(content: string): React.ReactNode {
+  const lines = content.split('\n');
+  return lines.map((line, lineIdx) => {
+    // Heading 3
+    if (line.startsWith('### ')) {
+      return (
+        <strong key={lineIdx} style={{ display: 'block', margin: '0.4rem 0 0.2rem 0', fontSize: '0.95rem' }}>
+          {line.replace(/^###\s+/, '')}
+        </strong>
+      );
+    }
+
+    const isBullet = line.trimStart().startsWith('- ');
+    const isNumbered = /^\s*\d+\.\s+/.test(line);
+
+    // Parse inline bold **text**
+    const parts = line.split(/(\*\*.*?\*\*)/g);
+    const parsedLine = parts.map((part, partIdx) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={partIdx}>{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+
+    if (isBullet || isNumbered) {
+      return (
+        <div key={lineIdx} style={{ paddingLeft: '0.75rem', margin: '0.15rem 0' }}>
+          {parsedLine}
+        </div>
+      );
+    }
+
+    if (!line.trim()) {
+      return <div key={lineIdx} style={{ height: '0.4rem' }} />;
+    }
+
+    return (
+      <div key={lineIdx}>
+        {parsedLine}
+      </div>
+    );
+  });
+}
+
+function createChatMessage(
+  sender: 'user' | 'assistant',
+  content: string,
+  securityFlag?: 'safe' | 'sanitized' | 'blocked'
+): ChatMessage {
+  return {
+    id: `${sender[0]}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    sender,
+    content,
+    timestamp: getFormattedTime(),
+    securityFlag
+  };
+}
+
 export const AIChatAssistant: React.FC<AIChatAssistantProps> = ({ event }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      sender: 'assistant',
-      content: `Hello! I'm your PlanVibe AI Co-Planner. I'm actively synced with **${event.title}** (${event.guestCount} guests, ${event.totalBudget.toLocaleString()} ${event.currency} budget). How can I assist with your planning today?`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      securityFlag: 'safe'
-    }
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
+    createChatMessage(
+      'assistant',
+      `Hello! I'm your PlanVibe AI Co-Planner. I'm actively synced with **${event.title}** (${event.guestCount} guests, ${event.totalBudget.toLocaleString()} ${event.currency} budget). How can I assist with your planning today?`,
+      'safe'
+    )
   ]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -40,12 +99,7 @@ export const AIChatAssistant: React.FC<AIChatAssistantProps> = ({ event }) => {
     const textToSend = customText || inputMessage;
     if (!textToSend.trim() || isTyping) return;
 
-    const userMsg: ChatMessage = {
-      id: `u-${Date.now()}`,
-      sender: 'user',
-      content: textToSend.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
+    const userMsg = createChatMessage('user', textToSend.trim());
 
     setMessages(prev => [...prev, userMsg]);
     if (!customText) setInputMessage('');
@@ -58,26 +112,13 @@ export const AIChatAssistant: React.FC<AIChatAssistantProps> = ({ event }) => {
       }));
 
       const response = await askAIChatAssistant(event, textToSend, chatHistory);
-
-      const aiMsg: ChatMessage = {
-        id: `a-${Date.now()}`,
-        sender: 'assistant',
-        content: response.reply,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        securityFlag: response.securityFlag
-      };
+      const aiMsg = createChatMessage('assistant', response.reply, response.securityFlag);
 
       setMessages(prev => [...prev, aiMsg]);
-    } catch (e) {
+    } catch {
       setMessages(prev => [
         ...prev,
-        {
-          id: `err-${Date.now()}`,
-          sender: 'assistant',
-          content: 'I encountered an error processing that request. Please try again.',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          securityFlag: 'safe'
-        }
+        createChatMessage('assistant', 'I encountered an error processing that request. Please try again.', 'safe')
       ]);
     } finally {
       setIsTyping(false);
@@ -223,15 +264,9 @@ export const AIChatAssistant: React.FC<AIChatAssistantProps> = ({ event }) => {
                   border: msg.sender === 'assistant' ? '1px solid var(--border-color)' : 'none',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word'
-                }}
-                dangerouslySetInnerHTML={{
-                  __html: DOMPurify.sanitize(
-                    msg.content
-                      .replace(/### (.*)/g, '<strong style="display:block; margin-bottom:0.25rem;">$1</strong>')
-                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                  )
-                }}
-                />
+                }}>
+                  {renderFormattedMessage(msg.content)}
+                </div>
 
                 <div style={{
                   display: 'flex',

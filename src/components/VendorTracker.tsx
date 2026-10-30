@@ -381,7 +381,7 @@ export const VendorTracker: React.FC<VendorTrackerProps> = ({
                 <select
                   className="input-control"
                   value={category}
-                  onChange={(e) => setCategory(e.target.value as any)}
+                  onChange={(e) => setCategory(e.target.value as VendorItem['category'])}
                 >
                   <option value="venue">Venue & Facilities</option>
                   <option value="catering">Catering & Bar</option>

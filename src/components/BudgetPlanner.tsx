@@ -501,7 +501,7 @@ export const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
                   <select
                     className="input-control"
                     value={priority}
-                    onChange={(e) => setPriority(e.target.value as any)}
+                    onChange={(e) => setPriority(e.target.value as BudgetItem['priority'])}
                   >
                     <option value="must-have">Must-Have</option>
                     <option value="nice-to-have">Nice-to-Have</option>

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import confetti from 'canvas-confetti';
 import { 
   Heart, 
   Cake, 
@@ -22,6 +21,34 @@ interface EventWizardProps {
   isOpen: boolean;
   onClose: () => void;
   onPlanCreated: (plan: EventPlan) => void;
+}
+
+function createEventDetailsPayload(params: {
+  title: string;
+  eventType: EventType;
+  date: string;
+  location: string;
+  guestCount: number | string;
+  totalBudget: number | string;
+  currency: Currency;
+  vibe: string;
+  specialRequests: string;
+}): EventDetails {
+  const timestamp = new Date().toISOString();
+  return {
+    id: `event-${Date.now()}`,
+    title: params.title.trim() || 'My Master Event',
+    type: params.eventType,
+    date: params.date,
+    location: params.location.trim() || 'Venue TBD',
+    guestCount: Math.max(1, Number(params.guestCount) || 50),
+    totalBudget: Math.max(100, Number(params.totalBudget) || 5000),
+    currency: params.currency,
+    vibe: params.vibe,
+    specialRequests: params.specialRequests.trim(),
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
 }
 
 export const EventWizard: React.FC<EventWizardProps> = ({
@@ -109,32 +136,34 @@ export const EventWizard: React.FC<EventWizardProps> = ({
     setIsGenerating(true);
     setProgressStatus('Initializing PlanVibe AI orchestration...');
 
-    const newDetails: EventDetails = {
-      id: `event-${Date.now()}`,
-      title: title.trim() || 'My Master Event',
-      type: eventType,
+    const newDetails = createEventDetailsPayload({
+      title,
+      eventType,
       date,
-      location: location.trim() || 'Venue TBD',
-      guestCount: Math.max(1, Number(guestCount) || 50),
-      totalBudget: Math.max(100, Number(totalBudget) || 5000),
+      location,
+      guestCount,
+      totalBudget,
       currency,
       vibe: vibe.trim() || vibePresets[eventType][0],
-      specialRequests: specialRequests.trim(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+      specialRequests
+    });
 
     try {
       const plan = await generateEventPlanAI(newDetails, (status) => {
         setProgressStatus(status);
       });
 
-      // Confetti burst
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
+      // Confetti burst (dynamically imported)
+      try {
+        const { default: confetti } = await import('canvas-confetti');
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      } catch {
+        // Non-blocking if confetti fails to load
+      }
 
       onPlanCreated(plan);
       onClose();

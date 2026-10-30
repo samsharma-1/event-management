@@ -25,6 +25,13 @@ interface DashboardProps {
   onOpenNewBudgetItemModal: () => void;
 }
 
+function computeDaysRemaining(targetDate: string): number {
+  const eventTime = new Date(targetDate).getTime();
+  const now = new Date().getTime();
+  const diffTime = eventTime - now;
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
 export const Dashboard: React.FC<DashboardProps> = ({
   plan,
   activeTab,
@@ -36,10 +43,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const { details, budget, timeline, vendors, ideas } = plan;
 
   // Calculate days remaining
-  const eventDate = new Date(details.date);
-  const now = new Date();
-  const diffTime = eventDate.getTime() - now.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const diffDays = computeDaysRemaining(details.date);
 
   // Budget calculations
   const totalEstimated = budget.items.reduce((sum, item) => sum + item.estimatedCost, 0);
